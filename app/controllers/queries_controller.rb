@@ -95,6 +95,7 @@ class QueriesController < ApplicationController
     if params[:project_id].present?
       q.project = Project.find(params[:project_id])
     end
+    q.build_from_params(params)
 
     unless User.current.allowed_to?(q.class.view_permission, q.project, :global => true)
       raise Unauthorized

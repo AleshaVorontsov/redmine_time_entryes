@@ -89,7 +89,7 @@ class TimeEntryQuery < Query
     )
     add_available_filter(
       "user_id",
-      :type => :list_optional, :values => lambda {author_values}
+      :type => :list_optional, :values => lambda {user_values}
     )
     add_available_filter(
       "user.group",
@@ -161,6 +161,35 @@ class TimeEntryQuery < Query
     if value_for('issue_id').to_s =~ /\A(\d+)\z/
       $1
     end
+  end
+
+  def user_values
+    issue_scope = filtered_issue_scope_for_user_values
+    return author_values unless issue_scope
+
+    participant_user_ids = TimeEntry.visible.where(:issue_id => issue_scope).distinct.pluck(:user_id)
+    values = []
+    if User.current.logged? && participant_user_ids.include?(User.current.id)
+      values << ["<< #{l(:label_me)} >>", "me"]
+    end
+    values +=
+      users_for_values(participant_user_ids).sort_by {|user| [user.status, user]}.
+        collect {|user| [user.name, user.id.to_s, l("status_#{User::LABEL_BY_STATUS[user.status]}")]}
+    values
+  end
+
+  def find_user_id_filter_values(values)
+    missing = []
+    values = Array(values).map(&:to_s)
+
+    if values.delete('me') && User.current.logged?
+      missing << ["<< #{l(:label_me)} >>", "me"]
+    end
+
+    user_ids = values.filter_map {|value| value.to_i if value.match?(/\A\d+\z/)}
+    missing +
+      users_for_values(user_ids).sort_by {|user| [user.status, user]}.
+        collect {|user| [user.name, user.id.to_s, l("status_#{User::LABEL_BY_STATUS[user.status]}")]}
   end
 
   def base_scope
@@ -367,5 +396,28 @@ class TimeEntryQuery < Query
 
     joins.compact!
     joins.any? ? joins.join(' ') : nil
+  end
+
+  private
+
+  def filtered_issue_scope_for_user_values
+    issue_id = filtered_issue_id
+    return unless issue_id
+
+    issue = Issue.find_by(:id => issue_id)
+    return unless issue
+
+    case operator_for('issue_id')
+    when '='
+      Issue.where(:id => issue.id)
+    when '~'
+      issue.self_and_descendants
+    end
+  end
+
+  def users_for_values(user_ids)
+    return [] if user_ids.blank?
+
+    User.where(:id => user_ids).to_a
   end
 end

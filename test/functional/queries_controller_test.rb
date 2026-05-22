@@ -943,6 +943,36 @@ class QueriesControllerTest < Redmine::ControllerTest
     assert_include ["Dave2 Lopper2", "5", "locked"], json
   end
 
+  def test_user_filter_should_consider_current_issue_filter_for_time_entries
+    issue = Issue.generate!(:project_id => 1)
+    other_issue = Issue.generate!(:project_id => 1)
+    participant = User.find(2)
+    outsider = User.find(3)
+
+    TimeEntry.generate!(:project => issue.project, :issue => issue, :user => participant, :hours => 1.0)
+    TimeEntry.generate!(:project => other_issue.project, :issue => other_issue, :user => outsider, :hours => 1.0)
+
+    @request.session[:user_id] = participant.id
+    get(
+      :filter,
+      :params => {
+        :project_id => 1,
+        :type => 'TimeEntryQuery',
+        :name => 'user_id',
+        :f => ['issue_id'],
+        :op => {'issue_id' => '='},
+        :v => {'issue_id' => [issue.id.to_s]}
+      }
+    )
+    assert_response :success
+    assert_equal 'application/json', response.media_type
+    json = ActiveSupport::JSON.decode(response.body)
+
+    assert_include ["<< me >>", "me"], json
+    assert_include [participant.name, participant.id.to_s, 'active'], json
+    assert_not_include [outsider.name, outsider.id.to_s, 'active'], json
+  end
+
   def test_watcher_filter_without_permission_should_show_only_me
     # This user does not have view_issue_watchers permission
     @request.session[:user_id] = 7
