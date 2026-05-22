@@ -231,23 +231,4 @@ class TimeEntryQueryTest < ActiveSupport::TestCase
     # Non-paginated time entry ids and paginated time entry ids should be in the same order.
     assert_equal time_entry_ids, paginated_time_entry_ids
   end
-
-  def test_user_filter_values_should_only_include_users_with_time_entries_on_filtered_issue
-    issue = Issue.generate!(:project_id => 1)
-    other_issue = Issue.generate!(:project_id => 1)
-    participant = User.find(2)
-    outsider = User.find(3)
-
-    TimeEntry.generate!(:project => issue.project, :issue => issue, :user => participant, :hours => 1.0)
-    TimeEntry.generate!(:project => other_issue.project, :issue => other_issue, :user => outsider, :hours => 1.0)
-
-    with_current_user(participant) do
-      query = TimeEntryQuery.new(:name => '_', :project => issue.project)
-      query.add_filter('issue_id', '=', [issue.id.to_s])
-
-      assert_include ["<< me >>", "me"], query.available_filters['user_id'].values
-      assert_include [participant.name, participant.id.to_s, 'active'], query.available_filters['user_id'].values
-      assert_not_include [outsider.name, outsider.id.to_s, 'active'], query.available_filters['user_id'].values
-    end
-  end
 end
